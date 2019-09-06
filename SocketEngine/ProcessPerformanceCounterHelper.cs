@@ -12,6 +12,8 @@ namespace SuperSocket.SocketEngine
 {
     class ProcessPerformanceCounterHelper : IDisposable
     {
+        bool isWindows;
+
         private PerformanceCounter m_CpuUsagePC;
         private PerformanceCounter m_ThreadCountPC;
         private PerformanceCounter m_WorkingSetPC;
@@ -21,6 +23,8 @@ namespace SuperSocket.SocketEngine
 
         public ProcessPerformanceCounterHelper(Process process)
         {
+            isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+
             m_Process = process;
             m_CpuCores = Environment.ProcessorCount;
 
@@ -49,11 +53,9 @@ namespace SuperSocket.SocketEngine
 
         private void SetupPerformanceCounters()
         {
-            var isUnix = Environment.OSVersion.Platform == PlatformID.Unix || Environment.OSVersion.Platform == PlatformID.MacOSX;
-
             var instanceName = string.Empty;
 
-            if (isUnix || Platform.IsMono)
+            if (!isWindows || Platform.IsMono)
                 instanceName = string.Format("{0}/{1}", m_Process.Id, m_Process.ProcessName);
             else
                 instanceName = GetPerformanceCounterInstanceName(m_Process);
@@ -67,9 +69,12 @@ namespace SuperSocket.SocketEngine
 
         private void SetupPerformanceCounters(string instanceName)
         {
-            m_CpuUsagePC = new PerformanceCounter("Process", "% Processor Time", instanceName);
-            m_ThreadCountPC = new PerformanceCounter("Process", "Thread Count", instanceName);
-            m_WorkingSetPC = new PerformanceCounter("Process", "Working Set", instanceName);
+            if (isWindows || Platform.IsMono)
+            {
+                m_CpuUsagePC = new PerformanceCounter("Process", "% Processor Time", instanceName);
+                m_ThreadCountPC = new PerformanceCounter("Process", "Thread Count", instanceName);
+                m_WorkingSetPC = new PerformanceCounter("Process", "Working Set", instanceName);
+            }
         }
 
         //This method is only used in windows
@@ -129,9 +134,12 @@ namespace SuperSocket.SocketEngine
                     statusCollection[StatusInfoKeys.AvailableCompletionPortThreads] = availableCompletionPortThreads;
                     statusCollection[StatusInfoKeys.MaxCompletionPortThreads] = maxCompletionPortThreads;
                     statusCollection[StatusInfoKeys.MaxWorkingThreads] = maxWorkingThreads;
-                    statusCollection[StatusInfoKeys.TotalThreadCount] = (int)m_ThreadCountPC.NextValue();
-                    statusCollection[StatusInfoKeys.CpuUsage] = m_CpuUsagePC.NextValue() / m_CpuCores;
-                    statusCollection[StatusInfoKeys.MemoryUsage] = (long)m_WorkingSetPC.NextValue();
+                    if (isWindows || Platform.IsMono)
+                    {
+                        statusCollection[StatusInfoKeys.TotalThreadCount] = (int)m_ThreadCountPC.NextValue();
+                        statusCollection[StatusInfoKeys.CpuUsage] = m_CpuUsagePC.NextValue() / m_CpuCores;
+                        statusCollection[StatusInfoKeys.MemoryUsage] = (long)m_WorkingSetPC.NextValue();
+                    }
 
                     break;
                 }
@@ -142,7 +150,7 @@ namespace SuperSocket.SocketEngine
                         throw e;
 
                     //Only re-get performance counter for .NET/Windows
-                    if (Environment.OSVersion.Platform == PlatformID.Unix || Environment.OSVersion.Platform == PlatformID.MacOSX || Platform.IsMono)
+                    if (!isWindows || Platform.IsMono)
                         throw e;
 
                     //If a same name process exited, this process's performance counters instance name could be changed,
