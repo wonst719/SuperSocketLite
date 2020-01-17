@@ -107,6 +107,9 @@ namespace SuperSocket.SocketEngine
 
         private void ClearPrevSendState(SocketAsyncEventArgs e)
         {
+            if (e == null)
+                return;
+
             e.UserToken = null;
 
             //Clear previous sending buffer of sae to avoid memory leak
